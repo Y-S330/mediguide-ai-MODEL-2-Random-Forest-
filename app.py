@@ -3,44 +3,68 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 
-st.set_page_config(page_title="MediGuide AI - Model 1", layout="wide")
+st.set_page_config(page_title="MediGuide AI - RF", layout="wide")
 
 # ================================
-# SIDEBAR
+# FULL STYLE
 # ================================
-st.sidebar.title("MediGuide AI")
-st.sidebar.success("Model: Random Forest")
-st.sidebar.info("Structured symptom-based disease prediction.")
+st.markdown("""
+<style>
+[data-testid="stAppViewContainer"] {
+    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+}
+.title {
+    text-align: center;
+    font-size: 48px;
+    font-weight: bold;
+    color: #00FFB2;
+}
+.subtitle {
+    text-align: center;
+    font-size: 18px;
+    color: #bbbbbb;
+    margin-bottom: 30px;
+}
+.card {
+    background-color: #111;
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid #00FFB2;
+    box-shadow: 0px 0px 15px rgba(0,255,178,0.2);
+}
+.stButton>button {
+    background-color: #00FFB2;
+    color: black;
+    font-weight: bold;
+    border-radius: 8px;
+    padding: 10px 20px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ================================
 # HEADER
 # ================================
-st.markdown("""
-<h1 style='text-align:center; color:#4CAF50;'>MediGuide AI</h1>
-<p style='text-align:center; color:gray;'>Random Forest Disease Prediction</p>
-""", unsafe_allow_html=True)
-
+st.markdown('<p class="title">MediGuide AI</p>', unsafe_allow_html=True)
+st.markdown('<p class="subtitle">Random Forest Disease Prediction</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 # ================================
-# LOAD + PROCESS DATA
+# LOAD DATA
 # ================================
 @st.cache_data
 def load_data():
     df = pd.read_csv("dataset.csv")
 
-    symptom_cols = [col for col in df.columns if "Symptom" in col]
+    symptom_cols = [c for c in df.columns if "Symptom" in c]
 
     for col in symptom_cols:
-        df[col] = df[col].astype(str).str.strip()
-        df[col] = df[col].str.replace(" ", "_")
-        df[col] = df[col].str.replace("__", "_")
+        df[col] = df[col].astype(str).str.strip().str.replace(" ", "_")
 
-    df[symptom_cols] = df[symptom_cols].replace("nan", "none")
-    df[symptom_cols] = df[symptom_cols].fillna("none")
+    df[symptom_cols] = df[symptom_cols].replace("nan", "none").fillna("none")
 
-    top_diseases = df["Disease"].value_counts().head(15).index
-    df = df[df["Disease"].isin(top_diseases)]
+    top = df["Disease"].value_counts().head(15).index
+    df = df[df["Disease"].isin(top)]
 
     X = pd.get_dummies(df[symptom_cols])
     y = df["Disease"]
@@ -53,99 +77,84 @@ def load_data():
 X, y, le = load_data()
 
 @st.cache_resource
-def train_model():
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X, y)
-    return model
+def train():
+    m = RandomForestClassifier(n_estimators=100, random_state=42)
+    m.fit(X, y)
+    return m
 
-model = train_model()
+model = train()
 
-# ================================
-# LOAD EXTRA DATA
-# ================================
 @st.cache_data
 def load_extra():
-    precautions_df = pd.read_csv("Disease precaution.csv")
-    desc_df = pd.read_csv("symptom_Description.csv")
+    p = pd.read_csv("Disease precaution.csv")
+    d = pd.read_csv("symptom_Description.csv")
 
-    precautions_df["Disease"] = precautions_df["Disease"].str.strip().str.lower().str.replace(" ", "")
-    desc_df["Disease"] = desc_df["Disease"].str.strip().str.lower().str.replace(" ", "")
+    p["Disease"] = p["Disease"].str.lower().str.replace(" ", "")
+    d["Disease"] = d["Disease"].str.lower().str.replace(" ", "")
 
-    precautions_map = {
-        row["Disease"]: row[1:].dropna().astype(str).values.tolist()
-        for _, row in precautions_df.iterrows()
-    }
+    p_map = {r["Disease"]: r[1:].dropna().tolist() for _, r in p.iterrows()}
+    d_map = dict(zip(d["Disease"], d["Description"]))
 
-    desc_map = dict(zip(desc_df["Disease"], desc_df["Description"]))
+    return p_map, d_map
 
-    return precautions_map, desc_map
-
-precautions_map, desc_map = load_extra()
+prec_map, desc_map = load_extra()
 
 # ================================
-# CLEAN SYMPTOMS
+# SYMPTOMS
 # ================================
-clean_symptoms = []
-for col in X.columns:
-    s = col.split("_", 2)[-1].replace("_", " ")
+clean = []
+for c in X.columns:
+    s = c.split("_", 2)[-1].replace("_", " ")
     if s != "none":
-        clean_symptoms.append(s)
-
-clean_symptoms = sorted(list(set(clean_symptoms)))
+        clean.append(s)
+clean = sorted(list(set(clean)))
 
 # ================================
-# INPUT UI
+# INPUT
 # ================================
 col1, col2 = st.columns(2)
 
 with col1:
-    selected = st.multiselect("🧠 Select Symptoms", clean_symptoms)
+    selected = st.multiselect("Select Symptoms", clean)
 
 with col2:
-    st.write(" ")
+    st.write("")
 
 center = st.columns([1,2,1])
 with center[1]:
-    diagnose = st.button("🔍 Diagnose")
+    run = st.button("🔍 Diagnose")
 
 # ================================
-# PREDICTION
+# PREDICT
 # ================================
-if diagnose:
+if run:
     if not selected:
         st.warning("Select symptoms first")
     else:
-        input_dict = {col: 0 for col in X.columns}
+        inp = {c: 0 for c in X.columns}
 
-        for symptom in selected:
-            formatted = symptom.replace(" ", "_")
-            for col in X.columns:
-                if formatted in col:
-                    input_dict[col] = 1
+        for s in selected:
+            f = s.replace(" ", "_")
+            for c in X.columns:
+                if f in c:
+                    inp[c] = 1
 
-        input_df = pd.DataFrame([input_dict])
-        pred = model.predict(input_df)[0]
+        df_in = pd.DataFrame([inp])
+        pred = model.predict(df_in)[0]
 
         disease = le.inverse_transform([pred])[0]
         key = disease.lower().replace(" ", "")
 
-        st.markdown("---")
+        st.markdown('<div class="card">', unsafe_allow_html=True)
 
-        c1, c2, c3 = st.columns(3)
+        st.markdown(f"## 🧾 Prediction: {disease}")
+        st.write("Confidence: High")
 
-        c1.metric("Disease", disease)
-        c2.metric("Confidence", "High")
-        c3.metric("Model", "Random Forest")
+        st.markdown("### 📄 Description")
+        st.write(desc_map.get(key, "No description"))
 
-        st.markdown("---")
+        st.markdown("### 🛡️ Precautions")
+        for p in prec_map.get(key, []):
+            st.write("✔", p)
 
-        colA, colB = st.columns(2)
-
-        with colA:
-            st.markdown("### 📄 Description")
-            st.info(desc_map.get(key, "No description"))
-
-        with colB:
-            st.markdown("### 🛡️ Precautions")
-            for p in precautions_map.get(key, []):
-                st.success(p)
+        st.markdown('</div>', unsafe_allow_html=True)
