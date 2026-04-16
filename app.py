@@ -1,74 +1,148 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+import os
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 
-st.set_page_config(page_title="MediGuide AI - RF", layout="wide")
+st.set_page_config(page_title="MediGuide AI", layout="wide")
 
-# ================= STYLE =================
+# ================== STYLE SYSTEM ==================
 st.markdown("""
 <style>
-[data-testid="stAppViewContainer"] {
-    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
-    color:white;
+
+/* GLOBAL */
+.stApp {
+    background: radial-gradient(circle at top, #0f172a, #020617);
+    color: #e2e8f0;
+    font-family: 'Inter', sans-serif;
 }
-.title {
+
+/* SPACING */
+[data-testid="block-container"] {
+    padding: 2rem 3rem;
+}
+
+/* HERO */
+.hero {
     text-align:center;
-    font-size:50px;
-    font-weight:bold;
-    color:#00FFB2;
+    margin-bottom:1.5rem;
 }
-.subtitle {
-    text-align:center;
-    color:#bbb;
-    margin-bottom:30px;
+.hero h1 {
+    font-size:3.2rem;
+    font-weight:900;
+    background:linear-gradient(135deg,#38bdf8,#6366f1,#34d399);
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
 }
-.card {
-    background:#121212;
-    padding:25px;
-    border-radius:15px;
-    border:1px solid #00FFB2;
-    box-shadow:0px 0px 20px rgba(0,255,178,0.2);
-    margin-top:20px;
+.hero p {
+    color:#94a3b8;
 }
-.stButton>button {
-    width:100%;
-    background:#00FFB2;
-    color:black;
-    font-size:18px;
-    border-radius:10px;
+
+/* INPUT LABEL */
+.input-label {
+    font-size:1.2rem;
+    font-weight:700;
+    color:#38bdf8;
+    margin-bottom:0.5rem;
+}
+
+/* MULTISELECT */
+.stMultiSelect div {
+    background:#020617!important;
+    border:1.5px solid #1e293b!important;
+    border-radius:16px!important;
+}
+
+/* BUTTON */
+.stButton button {
+    background:linear-gradient(135deg,#0ea5e9,#6366f1)!important;
+    border-radius:14px!important;
+    font-weight:600!important;
+}
+.stButton button:hover {
+    transform:translateY(-2px);
+    box-shadow:0 12px 30px rgba(14,165,233,.35);
+}
+
+/* CARDS */
+.result-card {
+    background:#020617;
+    border:1px solid #1e293b;
+    border-radius:18px;
+    padding:1.6rem;
+    margin-bottom:1.4rem;
+    transition:0.25s ease;
+}
+.result-card:hover {
+    transform:translateY(-5px) scale(1.01);
+    box-shadow:0 15px 40px rgba(0,0,0,.6);
+}
+
+/* TOP RESULT */
+.result-card.top {
+    border:1.5px solid #38bdf8;
+    background:linear-gradient(135deg, rgba(56,189,248,.20), rgba(99,102,241,.08));
+    box-shadow:0 25px 80px rgba(56,189,248,.30);
+    transform:scale(1.03);
+}
+
+/* TEXT */
+.disease-name {
+    font-size:1.6rem;
+    font-weight:900;
+}
+
+/* BAR */
+.bar-bg {
+    background:#1e293b;
+    height:7px;
+    border-radius:99px;
+}
+.bar {
+    height:7px;
+    border-radius:99px;
+    background:linear-gradient(90deg,#38bdf8,#6366f1);
+}
+
+/* WARNING BOX */
+.warn-box {
+    background:rgba(251,191,36,.1);
+    border:1px solid rgba(251,191,36,.3);
     padding:12px;
+    border-radius:14px;
+    margin-bottom:10px;
 }
+
+/* LOW CONF */
+.low-conf {
+    background:rgba(239,68,68,.08);
+    border:1px solid rgba(239,68,68,.3);
+    padding:12px;
+    border-radius:14px;
+}
+
+/* FOOTER */
+.footer {
+    text-align:center;
+    color:#334155;
+    font-size:.75rem;
+    margin-top:30px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
-# ================= HEADER =================
-st.markdown('<div class="title">MediGuide AI</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Random Forest Disease Prediction</div>', unsafe_allow_html=True)
-st.markdown("---")
+# ================== LOAD ==================
+BASE = os.path.dirname(__file__)
 
-st.markdown("""
-<div style='text-align:center; font-size:18px; margin-bottom:20px; color:#ddd;'>
-Select symptoms to predict disease using structured data
-</div>
-""", unsafe_allow_html=True)
-
-# ================= LOAD =================
 @st.cache_data
 def load_data():
-    df = pd.read_csv("dataset.csv")
+    df = pd.read_csv(os.path.join(BASE, "dataset.csv"))
+    sym_cols = [c for c in df.columns if "Symptom" in c]
 
-    symptom_cols = [c for c in df.columns if "Symptom" in c]
-
-    for col in symptom_cols:
-        df[col] = df[col].astype(str).str.strip().str.replace(" ", "_")
-
-    df[symptom_cols] = df[symptom_cols].replace("nan", "none").fillna("none")
-
-    top = df["Disease"].value_counts().head(15).index
-    df = df[df["Disease"].isin(top)]
-
-    X = pd.get_dummies(df[symptom_cols])
+    df[sym_cols] = df[sym_cols].fillna("none")
+    X = pd.get_dummies(df[sym_cols])
     y = df["Disease"]
 
     le = LabelEncoder()
@@ -76,89 +150,115 @@ def load_data():
 
     return X, y, le
 
-X, y, le = load_data()
-
 @st.cache_resource
-def train():
-    m = RandomForestClassifier(n_estimators=100, random_state=42)
-    m.fit(X, y)
-    return m
-
-model = train()
+def train_model(X, y):
+    model = RandomForestClassifier(n_estimators=150)
+    model.fit(X, y)
+    return model
 
 @st.cache_data
-def load_extra():
-    p = pd.read_csv("Disease precaution.csv")
-    d = pd.read_csv("symptom_Description.csv")
+def load_maps():
+    desc = pd.read_csv(os.path.join(BASE, "symptom_Description.csv"))
+    desc_map = dict(zip(desc["Disease"].str.lower(), desc["Description"]))
 
-    p["Disease"] = p["Disease"].str.lower().str.replace(" ","")
-    d["Disease"] = d["Disease"].str.lower().str.replace(" ","")
+    prec = pd.read_csv(os.path.join(BASE, "Disease precaution.csv"))
+    prec_map = {
+        row["Disease"].lower(): row[1:].dropna().tolist()
+        for _, row in prec.iterrows()
+    }
 
-    p_map = {r["Disease"]: r[1:].dropna().tolist() for _, r in p.iterrows()}
-    d_map = dict(zip(d["Disease"], d["Description"]))
+    return desc_map, prec_map
 
-    return p_map, d_map
+X, y, le = load_data()
+model = train_model(X, y)
+desc_map, prec_map = load_maps()
 
-prec_map, desc_map = load_extra()
+symptoms_list = sorted(set([c.split("_")[-1] for c in X.columns if "none" not in c]))
 
-# ================= SYMPTOMS =================
-clean = []
-for c in X.columns:
-    s = c.split("_",2)[-1].replace("_"," ")
-    if s != "none":
-        clean.append(s)
-clean = sorted(list(set(clean)))
+# ================== PREDICT ==================
+def predict_topk_rf(selected, k=5):
+    vec = [0]*len(X.columns)
 
-# ================= INPUT =================
-col1, col2 = st.columns([1.2,1])
-
-with col1:
-    selected = st.multiselect("🧠 Select Symptoms", clean)
-
-with col2:
-    st.write("")
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-btn = st.columns([1,1.5,1])
-with btn[1]:
-    run = st.button("🔍 Diagnose Now")
-
-# ================= PREDICT =================
-if run:
-    if not selected:
-        st.warning("Select symptoms")
-    else:
-        inp = {c:0 for c in X.columns}
-
+    for i, col in enumerate(X.columns):
         for s in selected:
-            f = s.replace(" ","_")
-            for c in X.columns:
-                if f in c:
-                    inp[c]=1
+            if s.replace(" ","_") in col:
+                vec[i] = 1
 
-        df_in = pd.DataFrame([inp])
-        pred = model.predict(df_in)[0]
+    proba = model.predict_proba([vec])[0]
+    idx = np.argsort(proba)[::-1][:k]
 
-        disease = le.inverse_transform([pred])[0]
-        key = disease.lower().replace(" ","")
+    return [(le.inverse_transform([i])[0], float(proba[i])) for i in idx]
 
-        st.markdown('<div class="card">', unsafe_allow_html=True)
+# ================== UI ==================
+st.markdown("""
+<div class="hero">
+<h1>🩺 MediGuide AI</h1>
+<p>AI-powered disease prediction using structured symptoms</p>
+</div>
+""", unsafe_allow_html=True)
 
-        st.markdown(f"<h2 style='color:#00FFB2;'>🧾 {disease}</h2>", unsafe_allow_html=True)
-        st.write("Confidence: High")
+col1, col2 = st.columns([1,1])
 
-        st.markdown("---")
+# ================== INPUT ==================
+with col1:
 
-        c1,c2 = st.columns(2)
+    st.markdown('<div class="input-label">Step 1: Select Your Symptoms</div>', unsafe_allow_html=True)
 
-        with c1:
-            st.markdown("### 📄 Description")
-            st.write(desc_map.get(key,"No description"))
+    st.markdown("""
+    <div class="warn-box">
+    ⚠️ Choose symptoms from the list below.<br>
+    Do NOT type random text — only select from suggestions.
+    </div>
+    """, unsafe_allow_html=True)
 
-        with c2:
-            st.markdown("### 🛡️ Precautions")
-            for p in prec_map.get(key,[]):
-                st.write("✔",p)
+    selected = st.multiselect(
+        "Symptoms",
+        symptoms_list,
+        placeholder="Click and choose symptoms...",
+        help="Start typing to search, then select from list",
+        max_selections=10
+    )
 
-        st.markdown('</div>', unsafe_allow_html=True)
+    if st.button("Diagnose"):
+        if not selected:
+            st.warning("Please select at least one symptom")
+        else:
+            with st.spinner("Analyzing..."):
+                results = predict_topk_rf(selected)
+
+            top, conf = results[0]
+
+            st.markdown(f"""
+            <div class="result-card top">
+                <div class="disease-name">{top}</div>
+                <div class="bar-bg">
+                    <div class="bar" style="width:{conf*100}%"></div>
+                </div>
+                <p>{conf*100:.1f}% confidence</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if conf < 0.2:
+                st.markdown('<div class="low-conf">Low confidence — add more symptoms</div>', unsafe_allow_html=True)
+
+            st.subheader("Description")
+            st.info(desc_map.get(top.lower(),"No description"))
+
+            st.subheader("Precautions")
+            for p in prec_map.get(top.lower(),[]):
+                st.success(p)
+
+# ================== RESULTS ==================
+with col2:
+    st.subheader("Other Possibilities")
+
+    if "results" in locals():
+        for d,c in results[1:]:
+            st.markdown(f"""
+            <div class="result-card">
+                <b>{d}</b><br>
+                {c*100:.1f}%
+            </div>
+            """, unsafe_allow_html=True)
+
+st.markdown('<div class="footer">Educational use only — not medical advice</div>', unsafe_allow_html=True)
