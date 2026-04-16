@@ -5,29 +5,25 @@ from sklearn.preprocessing import LabelEncoder
 
 st.set_page_config(page_title="MediGuide AI - Model 1", layout="wide")
 
-# ---------- STYLE ----------
-st.markdown("""
-    <style>
-    .main {
-        background-color: #0E1117;
-    }
-    .title {
-        font-size: 40px;
-        font-weight: bold;
-        color: #4CAF50;
-    }
-    .result-box {
-        background-color: #1E1E1E;
-        padding: 20px;
-        border-radius: 10px;
-        border: 1px solid #4CAF50;
-        margin-top: 20px;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# ================================
+# SIDEBAR
+# ================================
+st.sidebar.title("MediGuide AI")
+st.sidebar.success("Model: Random Forest")
+st.sidebar.info("Structured symptom-based disease prediction.")
 
 # ================================
-# LOAD + PREPROCESS (CACHED)
+# HEADER
+# ================================
+st.markdown("""
+<h1 style='text-align:center; color:#4CAF50;'>MediGuide AI</h1>
+<p style='text-align:center; color:gray;'>Random Forest Disease Prediction</p>
+""", unsafe_allow_html=True)
+
+st.markdown("---")
+
+# ================================
+# LOAD + PROCESS DATA
 # ================================
 @st.cache_data
 def load_data():
@@ -42,9 +38,7 @@ def load_data():
 
     df[symptom_cols] = df[symptom_cols].replace("nan", "none")
     df[symptom_cols] = df[symptom_cols].fillna("none")
-    df["Disease"] = df["Disease"].str.strip()
 
-    # keep only top diseases (clean demo)
     top_diseases = df["Disease"].value_counts().head(15).index
     df = df[df["Disease"].isin(top_diseases)]
 
@@ -54,16 +48,17 @@ def load_data():
     le = LabelEncoder()
     y = le.fit_transform(y)
 
-    return X, y, le, symptom_cols
+    return X, y, le
 
-# ================================
-# TRAIN MODEL (CACHED)
-# ================================
+X, y, le = load_data()
+
 @st.cache_resource
-def train_model(X, y):
+def train_model():
     model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(X, y)
     return model
+
+model = train_model()
 
 # ================================
 # LOAD EXTRA DATA
@@ -77,96 +72,80 @@ def load_extra():
     desc_df["Disease"] = desc_df["Disease"].str.strip().str.lower().str.replace(" ", "")
 
     precautions_map = {
-        row["Disease"]: row[1:].dropna().astype(str).str.strip().values.tolist()
+        row["Disease"]: row[1:].dropna().astype(str).values.tolist()
         for _, row in precautions_df.iterrows()
     }
 
-    desc_df["Description"] = desc_df["Description"].astype(str).str.strip()
     desc_map = dict(zip(desc_df["Disease"], desc_df["Description"]))
 
     return precautions_map, desc_map
 
-# ================================
-# PREP
-# ================================
-X, y, le, symptom_cols = load_data()
-model = train_model(X, y)
 precautions_map, desc_map = load_extra()
 
 # ================================
-# CLEAN SYMPTOMS FOR UI
+# CLEAN SYMPTOMS
 # ================================
 clean_symptoms = []
-
 for col in X.columns:
-    symptom = col
-
-    if "_" in symptom:
-        symptom = symptom.split("_", 2)[-1]
-
-    symptom = symptom.replace("_", " ")
-
-    if symptom != "none":
-        clean_symptoms.append(symptom)
+    s = col.split("_", 2)[-1].replace("_", " ")
+    if s != "none":
+        clean_symptoms.append(s)
 
 clean_symptoms = sorted(list(set(clean_symptoms)))
 
 # ================================
-# UI
+# INPUT UI
 # ================================
-st.markdown('<p class="title">MediGuide AI - Random Forest Model</p>', unsafe_allow_html=True)
+col1, col2 = st.columns(2)
 
-st.markdown("### 🧠 Select Symptoms")
-selected_symptoms = st.multiselect("Choose symptoms", clean_symptoms)
+with col1:
+    selected = st.multiselect("🧠 Select Symptoms", clean_symptoms)
 
-st.divider()
+with col2:
+    st.write(" ")
+
+center = st.columns([1,2,1])
+with center[1]:
+    diagnose = st.button("🔍 Diagnose")
 
 # ================================
 # PREDICTION
 # ================================
-if st.button("Diagnose"):
-
-    if not selected_symptoms:
-        st.warning("Please select at least one symptom.")
+if diagnose:
+    if not selected:
+        st.warning("Select symptoms first")
     else:
         input_dict = {col: 0 for col in X.columns}
 
-        for symptom in selected_symptoms:
+        for symptom in selected:
             formatted = symptom.replace(" ", "_")
             for col in X.columns:
                 if formatted in col:
                     input_dict[col] = 1
 
         input_df = pd.DataFrame([input_dict])
+        pred = model.predict(input_df)[0]
 
-        with st.spinner("Analyzing symptoms..."):
-            pred = model.predict(input_df)[0]
+        disease = le.inverse_transform([pred])[0]
+        key = disease.lower().replace(" ", "")
 
-        disease_display = le.inverse_transform([pred])[0]
+        st.markdown("---")
 
-        disease_key = (
-            disease_display.strip().lower().replace(" ", "")
-        )
+        c1, c2, c3 = st.columns(3)
 
-        description = desc_map.get(disease_key, "No description available")
-        precautions = precautions_map.get(disease_key, [])
+        c1.metric("Disease", disease)
+        c2.metric("Confidence", "High")
+        c3.metric("Model", "Random Forest")
 
-        st.markdown(f"""
-        <div class="result-box">
-        <h2 style='color:#4CAF50;'>Predicted Disease: {disease_display}</h2>
-        <p><b>Model:</b> Random Forest</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("---")
 
-        st.markdown("### 📄 Description")
-        st.info(description)
+        colA, colB = st.columns(2)
 
-        st.markdown("### 🛡️ Precautions")
+        with colA:
+            st.markdown("### 📄 Description")
+            st.info(desc_map.get(key, "No description"))
 
-        if precautions:
-            for p in precautions:
+        with colB:
+            st.markdown("### 🛡️ Precautions")
+            for p in precautions_map.get(key, []):
                 st.success(p)
-        else:
-            st.warning("No precautions available.")
-
-        st.success("Model Confidence: High (structured symptom matching)")
