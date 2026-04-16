@@ -6,38 +6,50 @@ from sklearn.preprocessing import LabelEncoder
 st.set_page_config(page_title="MediGuide AI - RF", layout="wide")
 
 # ================================
-# FULL STYLE
+# SAME UI STYLE
 # ================================
 st.markdown("""
 <style>
 [data-testid="stAppViewContainer"] {
     background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+    color: white;
 }
+
+.block-container {
+    padding-top: 2rem;
+}
+
 .title {
     text-align: center;
-    font-size: 48px;
+    font-size: 52px;
     font-weight: bold;
     color: #00FFB2;
 }
+
 .subtitle {
     text-align: center;
     font-size: 18px;
     color: #bbbbbb;
-    margin-bottom: 30px;
+    margin-bottom: 40px;
 }
+
 .card {
-    background-color: #111;
-    padding: 20px;
-    border-radius: 12px;
+    background-color: #121212;
+    padding: 25px;
+    border-radius: 14px;
     border: 1px solid #00FFB2;
-    box-shadow: 0px 0px 15px rgba(0,255,178,0.2);
+    box-shadow: 0px 0px 20px rgba(0,255,178,0.2);
+    margin-top: 20px;
 }
+
 .stButton>button {
+    width: 100%;
     background-color: #00FFB2;
     color: black;
+    font-size: 18px;
     font-weight: bold;
-    border-radius: 8px;
-    padding: 10px 20px;
+    border-radius: 10px;
+    padding: 12px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -45,8 +57,9 @@ st.markdown("""
 # ================================
 # HEADER
 # ================================
-st.markdown('<p class="title">MediGuide AI</p>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle">Random Forest Disease Prediction</p>', unsafe_allow_html=True)
+st.markdown('<div class="title">MediGuide AI</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Random Forest Disease Prediction</div>', unsafe_allow_html=True)
+
 st.markdown("---")
 
 # ================================
@@ -100,7 +113,7 @@ def load_extra():
 prec_map, desc_map = load_extra()
 
 # ================================
-# SYMPTOMS
+# CLEAN SYMPTOMS
 # ================================
 clean = []
 for c in X.columns:
@@ -110,26 +123,28 @@ for c in X.columns:
 clean = sorted(list(set(clean)))
 
 # ================================
-# INPUT
+# INPUT UI
 # ================================
 col1, col2 = st.columns(2)
 
 with col1:
-    selected = st.multiselect("Select Symptoms", clean)
+    selected = st.multiselect("🧠 Select Symptoms", clean)
 
 with col2:
     st.write("")
+
+st.markdown("<br>", unsafe_allow_html=True)
 
 center = st.columns([1,2,1])
 with center[1]:
     run = st.button("🔍 Diagnose")
 
 # ================================
-# PREDICT
+# PREDICTION
 # ================================
 if run:
     if not selected:
-        st.warning("Select symptoms first")
+        st.warning("Please select symptoms")
     else:
         inp = {c: 0 for c in X.columns}
 
