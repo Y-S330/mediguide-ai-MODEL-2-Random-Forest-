@@ -43,10 +43,16 @@ st.markdown("""
     margin-bottom: 0.5rem;
 }
 
-.stMultiSelect div {
+.stMultiSelect div,
+.stTextArea textarea {
     background: #020617 !important;
     border: 1.5px solid #1e293b !important;
     border-radius: 16px !important;
+}
+
+.stTextArea textarea:focus {
+    border-color: #38bdf8 !important;
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, .15) !important;
 }
 
 .stButton button {
@@ -131,16 +137,37 @@ st.markdown("""
     margin: 0.8rem 0;
 }
 
+.small-note {
+    color: #94a3b8;
+    font-size: 0.95rem;
+}
+
+.symptom-pill {
+    display: inline-block;
+    background: rgba(52, 211, 153, .12);
+    border: 1px solid rgba(52, 211, 153, .30);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    color: #6ee7b7;
+    margin: 3px 4px 0 0;
+}
+
+.unknown-box {
+    background: rgba(251, 191, 36, .08);
+    border: 1px solid rgba(251, 191, 36, .22);
+    border-radius: 12px;
+    padding: 10px 12px;
+    color: #fbbf24;
+    margin-top: 10px;
+    font-size: 0.85rem;
+}
+
 .footer {
     text-align: center;
     color: #64748b;
     font-size: .80rem;
     margin-top: 30px;
-}
-
-.small-note {
-    color: #94a3b8;
-    font-size: 0.95rem;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -194,7 +221,14 @@ def confidence_message(top_conf, second_conf):
         return "good", "Reasonable confidence prediction."
     if top_conf >= 0.20:
         return "medium", "Moderate confidence. Adding more symptoms may improve the result."
-    return "low", "Low confidence. Add more symptoms for a better prediction."
+    return "low", "Low confidence. Add more relevant symptoms for a better prediction."
+
+def clean_text_for_match(text):
+    text = str(text).lower().strip()
+    text = text.replace("_", " ")
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
 # ================== OPTIONAL CSV FILES ==================
 description_file = find_existing_file([
@@ -253,7 +287,7 @@ def load_maps():
 rf, le, feature_columns = load_models()
 desc_map, prec_map = load_maps()
 
-# ================== SYMPTOM MAP ==================
+# ================== SYMPTOM MAP FROM MODEL FEATURES ==================
 symptom_to_columns = {}
 for col in feature_columns:
     clean_symptom = extract_clean_symptom(col)
@@ -261,6 +295,87 @@ for col in feature_columns:
         symptom_to_columns.setdefault(clean_symptom, []).append(col)
 
 symptoms_list = sorted(symptom_to_columns.keys())
+
+# ================== AUTO-GENERATED ALIAS MAP ==================
+MANUAL_ALIASES = {
+    "frequent urination": "polyuria",
+    "urinating frequently": "polyuria",
+    "pee a lot": "polyuria",
+    "burning urination": "burning micturition",
+    "pain urinating": "burning micturition",
+    "painful urination": "burning micturition",
+    "high fever": "high fever",
+    "mild fever": "mild fever",
+    "light sensitivity": "visual disturbances",
+    "sensitivity to light": "visual disturbances",
+    "blurred vision": "blurred and distorted vision",
+    "blurry vision": "blurred and distorted vision",
+    "runny nose": "runny nose",
+    "sore throat": "throat irritation",
+    "joint pain": "joint pain",
+    "chest pain": "chest pain",
+    "stomach pain": "stomach pain",
+    "abdominal pain": "abdominal pain",
+    "back pain": "back pain",
+    "headache": "headache",
+    "fatigue": "fatigue",
+    "tiredness": "fatigue",
+    "nausea": "nausea",
+    "vomiting": "vomiting",
+    "cough": "cough",
+    "breathlessness": "breathlessness",
+    "shortness of breath": "breathlessness",
+    "sneezing": "continuous sneezing",
+    "dizziness": "dizziness"
+}
+
+@st.cache_data
+def build_alias_map(symptoms):
+    alias_map = {}
+
+    for symptom in symptoms:
+        s = clean_text_for_match(symptom)
+
+        alias_map[s] = symptom
+        alias_map[s.replace(" ", "_")] = symptom
+
+        if s.endswith("s"):
+            alias_map[s[:-1]] = symptom
+        else:
+            alias_map[s + "s"] = symptom
+
+        alias_map[s.replace(" and ", " ")] = symptom
+        alias_map[s.replace(" ", "")] = symptom
+
+    for alias, target in MANUAL_ALIASES.items():
+        alias_clean = clean_text_for_match(alias)
+        target_clean = clean_text_for_match(target)
+        if target_clean in symptoms:
+            alias_map[alias_clean] = target_clean
+
+    return alias_map
+
+alias_map = build_alias_map(symptoms_list)
+sorted_aliases = sorted(alias_map.keys(), key=len, reverse=True)
+
+def extract_symptoms_from_text(text):
+    cleaned = clean_text_for_match(text)
+    if not cleaned:
+        return [], cleaned
+
+    detected = []
+    remaining = cleaned
+
+    for alias in sorted_aliases:
+        pattern = r"\b" + re.escape(alias) + r"\b"
+        if re.search(pattern, remaining):
+            canonical = alias_map[alias]
+            if canonical not in detected:
+                detected.append(canonical)
+            remaining = re.sub(pattern, " ", remaining)
+
+    remaining = re.sub(r"\s+", " ", remaining).strip()
+    return detected, remaining
 
 # ================== PREDICTION ==================
 def predict_topk_rf(selected_symptoms, k=5):
@@ -296,34 +411,61 @@ st.markdown("""
 col1, col2 = st.columns([1, 1])
 
 with col1:
-    st.markdown('<div class="input-label">Select Your Symptoms</div>', unsafe_allow_html=True)
+    st.markdown('<div class="input-label">Select or Describe Your Symptoms</div>', unsafe_allow_html=True)
 
     st.markdown("""
     <div class="warn-box">
-        ⚠️ Choose symptoms from the list below.<br>
-        Do not type random text. Select symptoms from the suggestions only.
+        ⚠️ You can use the dropdown, type symptoms naturally, or use both.<br>
+        Try to enter symptoms from the same illness for better results.
     </div>
     """, unsafe_allow_html=True)
 
     selected = st.multiselect(
         "Symptoms",
         symptoms_list,
-        placeholder="Click and choose symptoms...",
-        help="Start typing to search, then select from the list",
+        placeholder="Choose symptoms from the list...",
+        help="Start typing to search and select symptoms from the list",
         max_selections=10,
         label_visibility="collapsed"
     )
 
+    free_text = st.text_area(
+        "Or type symptoms naturally",
+        placeholder="e.g. high fever, headache, blurred vision, frequent urination",
+        height=110
+    )
+
+    detected_from_text, leftover_text = extract_symptoms_from_text(free_text)
+
+    if free_text.strip():
+        if detected_from_text:
+            pills_html = "".join(
+                f'<span class="symptom-pill">✓ {symptom.title()}</span>'
+                for symptom in detected_from_text
+            )
+            st.markdown(
+                f'<div style="margin-top:.5rem"><div class="small-note">Recognized from text</div>{pills_html}</div>',
+                unsafe_allow_html=True
+            )
+        if leftover_text:
+            st.markdown(
+                f'<div class="unknown-box">Some text was not recognized: <b>{leftover_text}</b></div>',
+                unsafe_allow_html=True
+            )
+
     diagnose_clicked = st.button("Diagnose")
 
     if diagnose_clicked:
-        if not selected:
-            st.warning("Please select at least one symptom.")
+        combined_symptoms = list(dict.fromkeys(selected + detected_from_text))
+
+        if not combined_symptoms:
+            st.warning("Please select symptoms or type symptoms that the system can recognize.")
         else:
             with st.spinner("Analyzing symptoms..."):
-                results = predict_topk_rf(selected, k=5)
+                results = predict_topk_rf(combined_symptoms, k=5)
 
             st.session_state["results"] = results
+            st.session_state["used_symptoms"] = combined_symptoms
 
             top_disease, top_conf = results[0]
             second_conf = results[1][1] if len(results) > 1 else 0.0
@@ -346,7 +488,15 @@ with col1:
             else:
                 st.markdown(f'<div class="low-conf">{msg}</div>', unsafe_allow_html=True)
 
+            if len(combined_symptoms) < 2:
+                st.warning("Only one symptom was recognized. Results may be weak.")
+            elif len(combined_symptoms) > 8:
+                st.warning("Many symptoms were entered. If they belong to multiple illnesses, accuracy may decrease.")
+
             disease_key = normalize_disease_key(top_disease)
+
+            st.subheader("Recognized Symptoms Used")
+            st.write(", ".join(combined_symptoms))
 
             st.subheader("Description")
             st.info(desc_map.get(disease_key, "No description available."))
