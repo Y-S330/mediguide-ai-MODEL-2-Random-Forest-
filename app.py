@@ -198,7 +198,7 @@ def confidence_message(top_conf: float, second_conf: float) -> Tuple[str, str]:
     gap = top_conf - second_conf
     if top_conf >= 0.50:
         return "good", "Strong confidence prediction."
-    if top_conf >= 0.35 and gap >= 0.10:
+    if top_conf >= 0.30 and gap >= 0.08:
         return "good", "Reasonable confidence prediction."
     if top_conf >= 0.20:
         return "medium", "Moderate confidence. Adding more symptoms may improve the result."
@@ -246,7 +246,8 @@ def load_models():
 
     model_feature_cols = joblib.load(feature_columns_file)
     model_feature_cols = [
-        str(x).strip() for x in model_feature_cols
+        str(x).strip()
+        for x in model_feature_cols
         if str(x).strip() and str(x).strip().lower() != "none"
     ]
 
@@ -262,9 +263,7 @@ def load_models():
         display_feature_cols = [clean_text_for_match(x) for x in display_feature_cols]
 
     if len(model_feature_cols) != len(display_feature_cols):
-        raise ValueError(
-            "Mismatch between feature_columns.pkl and display_features.pkl lengths."
-        )
+        raise ValueError("Mismatch between feature_columns.pkl and display_features.pkl lengths.")
 
     if not hasattr(rf_model, "predict_proba"):
         raise ValueError("Loaded model does not support predict_proba().")
@@ -315,9 +314,10 @@ except Exception as e:
     st.stop()
 
 # ================== FEATURE MAPPING ==================
-display_to_model = {
-    disp: model for disp, model in zip(display_features, model_features)
-}
+display_to_model: Dict[str, str] = {}
+for disp, model in zip(display_features, model_features):
+    display_to_model[clean_text_for_match(disp)] = model
+
 feature_index = {model: i for i, model in enumerate(model_features)}
 
 # ================== ALIASES ==================
@@ -419,15 +419,18 @@ alias_to_display: Dict[str, str] = {}
 
 for disp in display_features:
     cleaned = clean_text_for_match(disp)
-    alias_to_display[cleaned] = disp
-    alias_to_display[cleaned.replace(" ", "")] = disp
-    alias_to_display[cleaned.replace(" ", "_")] = disp
+    alias_to_display[cleaned] = cleaned
+    alias_to_display[cleaned.replace(" ", "")] = cleaned
+    alias_to_display[cleaned.replace(" ", "_")] = cleaned
 
 for alias, target in MANUAL_ALIASES.items():
     alias_clean = clean_text_for_match(alias)
     target_clean = clean_text_for_match(target)
+
     if target_clean in display_to_model:
         alias_to_display[alias_clean] = target_clean
+    elif target_clean.replace(" ", "") in display_to_model:
+        alias_to_display[alias_clean] = target_clean.replace(" ", "")
 
 sorted_aliases = sorted(alias_to_display.keys(), key=len, reverse=True)
 
@@ -441,8 +444,8 @@ def extract_symptoms_from_text(text: str) -> Tuple[List[str], str]:
     remaining = cleaned
 
     for alias in sorted_aliases:
-        display_symptom = alias_to_display[alias]
-        model_symptom = display_to_model[display_symptom]
+        display_key = alias_to_display[alias]
+        model_symptom = display_to_model[display_key]
         pattern = r"\b" + re.escape(alias) + r"\b"
 
         if re.search(pattern, remaining):
@@ -456,7 +459,7 @@ def extract_symptoms_from_text(text: str) -> Tuple[List[str], str]:
 # ================== PREDICTION ==================
 @st.cache_data(show_spinner=False)
 def predict_topk_rf(selected_model_symptoms_tuple: Tuple[str, ...], k: int = 5):
-    selected_model_symptoms = list(selected_model_symptoms_tuple)
+    selected_model_symptoms = selected_model_symptoms_tuple
 
     input_vector = np.zeros((1, len(model_features)), dtype=np.float32)
     matched_count = 0
@@ -489,7 +492,6 @@ def predict_topk_rf(selected_model_symptoms_tuple: Tuple[str, ...], k: int = 5):
     top_conf = results[0][1]
     second_conf = results[1][1] if len(results) > 1 else 0.0
 
-    # Keep consistent with your latest pipeline logic
     if matched_count < 2:
         return {
             "warning": "Too few valid symptoms detected. Please provide more specific symptoms.",
@@ -587,13 +589,15 @@ with col1:
         st.rerun()
 
     if diagnose_clicked:
-        selected_model = [
-            display_to_model[clean_text_for_match(s)]
-            for s in selected_display
-            if clean_text_for_match(s) in display_to_model
-        ]
+        selected_model = []
+        for s in selected_display:
+            display_key = clean_text_for_match(s)
+            if display_key in display_to_model:
+                selected_model.append(display_to_model[display_key])
 
-        combined_symptoms = list(dict.fromkeys(selected_model + detected_model))
+        combined_symptoms = list(dict.fromkeys(selected_model)) + [
+            s for s in detected_model if s not in selected_model
+        ]
 
         if not combined_symptoms:
             st.warning("Please select symptoms or type symptoms that the system can recognize.")
@@ -623,6 +627,10 @@ with col1:
     if st.session_state["results"]:
         results = st.session_state["results"]
         combined_symptoms = st.session_state["used_symptoms"]
+
+        if not results:
+            st.error("Prediction failed. Try different symptoms.")
+            st.stop()
 
         top_disease, top_conf = results[0]
         second_conf = results[1][1] if len(results) > 1 else 0.0
@@ -656,7 +664,8 @@ with col1:
         st.markdown(render_symptom_pills(combined_symptoms), unsafe_allow_html=True)
 
         st.subheader("Description")
-        st.info(desc_map.get(disease_key, "No description available."))
+        desc = desc_map.get(disease_key, "No description available.")
+        st.markdown(f"**{escape(desc)}**")
 
         st.subheader("Precautions")
         precautions = prec_map.get(disease_key, [])
