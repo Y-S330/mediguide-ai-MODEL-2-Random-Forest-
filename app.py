@@ -298,35 +298,98 @@ symptoms_list = sorted(symptom_to_columns.keys())
 
 # ================== AUTO-GENERATED ALIAS MAP ==================
 MANUAL_ALIASES = {
+    # urination-related
     "frequent urination": "polyuria",
     "urinating frequently": "polyuria",
     "pee a lot": "polyuria",
+    "excessive urination": "polyuria",
+    # burning urination
     "burning urination": "burning micturition",
     "pain urinating": "burning micturition",
     "painful urination": "burning micturition",
+    "burning while urinating": "burning micturition",
+    # fever
+    "fever": "high fever",
     "high fever": "high fever",
+    "very high fever": "high fever",
     "mild fever": "mild fever",
+    "low fever": "mild fever",
+    "slight fever": "mild fever",
+    # sweating / chills
+    "sweat": "sweating",
+    "sweating": "sweating",
+    "night sweats": "sweating",
+    "chill": "chills",
+    "chills": "chills",
+    "shivering": "chills",
+    "shivers": "chills",
+    # cold hands and feet
+    "cold hands": "cold hands and feets",
+    "cold feet": "cold hands and feets",
+    "cold hands and feet": "cold hands and feets",
+    # vision and light
     "light sensitivity": "visual disturbances",
     "sensitivity to light": "visual disturbances",
     "blurred vision": "blurred and distorted vision",
     "blurry vision": "blurred and distorted vision",
+    "blurred and distorted vision": "blurred and distorted vision",
+    # throat and nose
     "runny nose": "runny nose",
+    "blocked nose": "congestion",
+    "nasal congestion": "congestion",
     "sore throat": "throat irritation",
+    "throat pain": "throat irritation",
+    "throat irritation": "throat irritation",
+    # pain-related
     "joint pain": "joint pain",
+    "joint ache": "joint pain",
+    "muscle pain": "muscle pain",
+    "body ache": "muscle pain",
+    "body pain": "muscle pain",
     "chest pain": "chest pain",
+    "chest ache": "chest pain",
+    "chest discomfort": "chest pain",
     "stomach pain": "stomach pain",
+    "stomach ache": "stomach pain",
+    "belly pain": "abdominal pain",
+    "belly ache": "abdominal pain",
     "abdominal pain": "abdominal pain",
     "back pain": "back pain",
+    "lower back pain": "back pain",
+    "hip pain": "hip joint pain",
+    # headache and migraine
     "headache": "headache",
+    "head ache": "headache",
+    "head pain": "headache",
+    "migraine": "headache",
+    # energy
     "fatigue": "fatigue",
     "tiredness": "fatigue",
+    "tired": "fatigue",
+    "weakness": "fatigue",
+    "lack of energy": "fatigue",
+    # nausea and vomiting
     "nausea": "nausea",
+    "queasiness": "nausea",
     "vomiting": "vomiting",
+    "throwing up": "vomiting",
+    # cough and breathing
     "cough": "cough",
+    "dry cough": "cough",
+    "wet cough": "cough",
+    "coughing": "cough",
     "breathlessness": "breathlessness",
     "shortness of breath": "breathlessness",
+    "difficulty breathing": "breathlessness",
+    "can't breathe": "breathlessness",
+    # sneezing and congestion
     "sneezing": "continuous sneezing",
-    "dizziness": "dizziness"
+    "continuous sneezing": "continuous sneezing",
+    # dizziness and lightheadedness
+    "dizziness": "dizziness",
+    "dizzy": "dizziness",
+    "lightheaded": "dizziness",
+    "lightheadedness": "dizziness"
 }
 
 @st.cache_data
@@ -360,22 +423,29 @@ sorted_aliases = sorted(alias_map.keys(), key=len, reverse=True)
 
 def extract_symptoms_from_text(text):
     cleaned = clean_text_for_match(text)
+
     if not cleaned:
-        return [], cleaned
+        return [], ""
 
     detected = []
     remaining = cleaned
 
     for alias in sorted_aliases:
         pattern = r"\b" + re.escape(alias) + r"\b"
+
         if re.search(pattern, remaining):
             canonical = alias_map[alias]
+
             if canonical not in detected:
                 detected.append(canonical)
+
             remaining = re.sub(pattern, " ", remaining)
 
     remaining = re.sub(r"\s+", " ", remaining).strip()
+
     return detected, remaining
+
+
 
 # ================== PREDICTION ==================
 def predict_topk_rf(selected_symptoms, k=5):
