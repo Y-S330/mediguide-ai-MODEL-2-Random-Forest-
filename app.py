@@ -427,14 +427,16 @@ def extract_symptoms_from_text(text):
     detected = []
     remaining = cleaned
 
-    for alias in sorted_aliases:
-        pattern = r"\b" + re.escape(alias) + r"\b"
+    for symptom in feature_columns:
+
+        # normalize both sides
+        normalized = clean_text_for_match(symptom)
+
+        pattern = r"\b" + re.escape(normalized) + r"\b"
 
         if re.search(pattern, remaining):
-            canonical = alias_map[alias]
-
-            if canonical not in detected:
-                detected.append(canonical)
+            if symptom not in detected:
+                detected.append(symptom)
 
             remaining = re.sub(pattern, " ", remaining, count=1)
 
