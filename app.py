@@ -588,7 +588,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================
-# 15) MAIN UI
+# 15) MAIN UI (FINAL FIXED)
 # ==============================
 col1, col2 = st.columns([1, 1])
 
@@ -641,13 +641,19 @@ with col1:
     with b2:
         clear_clicked = st.button("Clear", use_container_width=True)
 
+    # 🔴 FIXED CLEAR BUTTON (SAFE VERSION)
     if clear_clicked:
-        st.session_state["selected_display"] = []
-        st.session_state["free_text"] = ""
-        st.session_state["results"] = None
-        st.session_state["used_symptoms"] = []
-        st.session_state["decision_warning"] = None
-        st.session_state["decision_margin"] = None
+        for key in [
+            "selected_display",
+            "free_text",
+            "results",
+            "used_symptoms",
+            "decision_warning",
+            "decision_margin"
+        ]:
+            if key in st.session_state:
+                del st.session_state[key]
+
         st.rerun()
 
     if diagnose_clicked:
@@ -688,10 +694,10 @@ with col1:
                     st.session_state["decision_warning"] = decision.get("warning")
                     st.session_state["decision_margin"] = decision.get("margin")
 
-    if st.session_state["results"]:
+    if st.session_state.get("results"):
         results = st.session_state["results"]
         combined_symptoms = st.session_state["used_symptoms"]
-        decision_warning = st.session_state["decision_warning"]
+        decision_warning = st.session_state.get("decision_warning")
 
         top_disease, top_conf = results[0]
         second_conf = results[1][1] if len(results) > 1 else 0.0
@@ -738,24 +744,6 @@ with col1:
                 st.success(precaution)
         else:
             st.warning("No precautions available.")
-
-with col2:
-    st.subheader("Other Possibilities")
-
-    if st.session_state["results"]:
-        results = st.session_state["results"]
-        if len(results) > 1:
-            for disease, conf in results[1:]:
-                st.markdown(f"""
-                <div class="result-card">
-                    <b>{escape(disease)}</b><br>
-                    <span class="small-note">{conf * 100:.1f}% confidence</span>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("No additional predictions available yet.")
-    else:
-        st.info("Your top alternative predictions will appear here after diagnosis.")
 
 # ==============================
 # 16) FOOTER
