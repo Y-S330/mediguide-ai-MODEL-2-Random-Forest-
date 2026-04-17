@@ -432,7 +432,9 @@ def extract_symptoms_from_text(text):
         # normalize both sides
         normalized = clean_text_for_match(symptom)
 
-        pattern = r"\b" + re.escape(normalized) + r"\b"
+        # 🔥 flexible matching (handles small variations)
+        words = normalized.split()
+        pattern = r"\b" + r"\s+".join(words) + r"\b"
 
         if re.search(pattern, remaining):
             if symptom not in detected:
